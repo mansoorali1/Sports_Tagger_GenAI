@@ -456,6 +456,16 @@ def segment_commentary(raw_text: str) -> list:
 
         if len(line.split()) < 4:
             continue
+        # In segment_commentary, add this filter before the word count check
+        # Skip common noise lines that carry no event information
+        noise_patterns = [
+            r'second half ends', r'first half ends', r'full time',
+            r'half time', r'second half begins', r'first half begins',
+            r'lineups are announced', r'fourth official',
+            r'delay in match', r'delay over', r'they are ready'
+        ]
+        if any(re.search(p, line.lower()) for p in noise_patterns):
+            continue
         if re.match(r'^\d+[\'\:]?\s*$', line):
             continue
 
