@@ -199,12 +199,7 @@ to different business units simultaneously.
 #                 ['minute', 'label', 'confidence', 'impact', 'text']
 #             ]
 #             st.dataframe(df_cls, use_container_width=True)
-"""
-streamlit_app.py — Demo Interface
 
-Interactive UI for the Sports Auto-Tagger pipeline.
-Demonstrates dynamic commentary parsing where sidebar details are optional.
-"""
 
 import os
 import requests
