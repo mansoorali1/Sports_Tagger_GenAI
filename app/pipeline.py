@@ -60,37 +60,72 @@ def load_artifacts(artifacts_dir: str = 'artifacts'):
 
 # ── Text segmentation ──────────────────────────────────────────────
 
+# def segment_commentary(raw_text: str) -> list:
+#     """
+#     Splits raw commentary block into individual event segments.
+#     Extracts minute timestamps where present.
+#     """
+#     segments = []
+#     lines    = raw_text.strip().split('\n')
+
+#     for line in lines:
+#         line = line.strip()
+#         if not line or len(line.split()) < 4:
+#             continue
+#         if re.match(r'^\d+[\'\:]?\s*$', line):
+#             continue
+
+#         minute = None
+#         text   = line
+
+#         for pattern in [r'^\[?(\d+)\+?\d*\]?[\'\:\-\s]+',
+#                         r'^\((\d+)\)[\s]+']:
+#             match = re.match(pattern, line)
+#             if match:
+#                 minute = int(match.group(1))
+#                 text   = line[match.end():].strip()
+#                 break
+
+#         if len(text.split()) >= 4:
+#             segments.append({'minute': minute, 'text': text})
+
+#     return segments
 def segment_commentary(raw_text: str) -> list:
-    """
-    Splits raw commentary block into individual event segments.
-    Extracts minute timestamps where present.
-    """
     segments = []
-    lines    = raw_text.strip().split('\n')
+    lines = raw_text.strip().split('\n')
+    
+    current_minute = None  # State variable to track isolated timestamps
 
     for line in lines:
         line = line.strip()
-        if not line or len(line.split()) < 4:
+        if not line:
             continue
-        if re.match(r'^\d+[\'\:]?\s*$', line):
+            
+        # Catch isolated minute markers like 90'+6' or 82'
+        minute_match = re.match(r'^(\d+)(?:\+\d*)?\'?\s*$', line)
+        if minute_match:
+            current_minute = int(minute_match.group(1))
+            continue # Move to the next line containing the text
+
+        if len(line.split()) < 4:
             continue
 
-        minute = None
-        text   = line
+        minute = current_minute
+        text = line
 
-        for pattern in [r'^\[?(\d+)\+?\d*\]?[\'\:\-\s]+',
-                        r'^\((\d+)\)[\s]+']:
+        # Standard inline regex check if timestamp is on the same line
+        for pattern in [r'^\[?(\d+)\+?\d*\]?[\'\:\-\s]+', r'^\((\d+)\)[\s]+']:
             match = re.match(pattern, line)
             if match:
                 minute = int(match.group(1))
-                text   = line[match.end():].strip()
+                text = line[match.end():].strip()
                 break
 
         if len(text.split()) >= 4:
             segments.append({'minute': minute, 'text': text})
+            current_minute = None # Reset after assignment
 
     return segments
-
 
 # ── Classification ─────────────────────────────────────────────────
 
