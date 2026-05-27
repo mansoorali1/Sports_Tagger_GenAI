@@ -1,12 +1,13 @@
-# MatchLens AI
 ---
 title: MatchLens AI
 emoji: ⚽
 colorFrom: green
 colorTo: blue
 sdk: docker
+app_file: app.py
 pinned: false
 ---
+
 
 # MatchLens AI — Sports Commentary Auto-Tagger & Highlight Generator
 
