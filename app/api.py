@@ -171,8 +171,6 @@ class CommentaryRequest(BaseModel):
     away_team: str = 'Away Team'
     score: str = 'Unknown'
     competition: Optional[str] = 'Football Match'
-    match_date: Optional[str] = ''
-
 
 class HighlightsResponse(BaseModel):
     match_info: dict
@@ -232,7 +230,6 @@ def generate_highlights(request: CommentaryRequest):
             away_team=request.away_team,
             score=request.score,
             competition=request.competition,
-            match_date=request.match_date,
             groq_api_key=GROQ_API_KEY,
             artifacts_dir=ARTIFACTS_DIR
         )
