@@ -238,7 +238,7 @@ def generate_highlights(request: CommentaryRequest):
         )
 
         print("Pipeline completed successfully.")
-
+        print(result)
         return result
 
     except Exception as e:
