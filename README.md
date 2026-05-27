@@ -65,4 +65,4 @@ events like red cards.
 ## Data
 
 European football commentary dataset — 941,009 events across 9,074 matches
-from 5 leagues (2011-2017). Events.csv + ginf.csv from Kaggle.
+from 5 leagues (2011-2017). Events.csv + ginf.csv from Kaggle
