@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-from pipeline import run_pipeline
+from app.pipeline import run_pipeline
 
 app = FastAPI(
     title='Sports Auto-Tagger API',
