@@ -10,7 +10,7 @@ to different business units simultaneously.
 import os
 import requests
 import streamlit as st
-from app.pipeline import run_pipeline
+from pipeline import run_pipeline
 
 
 API_URL = os.environ.get('API_URL', 'http://localhost:8000')
