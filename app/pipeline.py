@@ -16,7 +16,8 @@ import pickle
 import unicodedata
 import numpy as np
 from groq import Groq
-
+import httpx
+    
 
 # ── Label and impact mappings ──────────────────────────────────────
 
@@ -229,7 +230,8 @@ def generate_highlights(timeline_text: str, groq_api_key: str) -> dict:
     """
     Sends timeline to LLaMA-3 via Groq and returns parsed highlights.
     """
-    client = Groq(api_key=groq_api_key)
+    http_client = httpx.Client(proxies=None)
+    client = Groq(api_key=groq_api_key, http_client=http_client)
 
     response = client.chat.completions.create(
         model='llama-3.1-8b-instant',
