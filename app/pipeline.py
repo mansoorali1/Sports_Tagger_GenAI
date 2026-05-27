@@ -230,7 +230,7 @@ def generate_highlights(timeline_text: str, groq_api_key: str) -> dict:
     """
     Sends timeline to LLaMA-3 via Groq and returns parsed highlights.
     """
-    http_client = httpx.Client(proxies=None)
+    http_client = httpx.Client()
     client = Groq(api_key=groq_api_key, http_client=http_client)
 
     response = client.chat.completions.create(
