@@ -19,6 +19,8 @@ from typing import Optional
 
 from app.pipeline import run_pipeline
 
+
+
 app = FastAPI(
     title='Sports Auto-Tagger API',
     description=(
@@ -37,7 +39,9 @@ app.add_middleware(
 )
 
 GROQ_API_KEY   = os.environ.get('GROQ_API_KEY', '')
-ARTIFACTS_DIR  = os.environ.get('ARTIFACTS_DIR', 'artifacts')
+ARTIFACTS_DIR = os.environ.get('ARTIFACTS_DIR', '/app/artifacts')
+
+
 
 
 class CommentaryRequest(BaseModel):
