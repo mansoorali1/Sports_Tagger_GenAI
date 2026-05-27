@@ -4,10 +4,9 @@ emoji: ⚽
 colorFrom: green
 colorTo: blue
 sdk: docker
-app_file: app.py
+app_port: 8501
 pinned: false
 ---
-
 
 # MatchLens AI — Sports Commentary Auto-Tagger & Highlight Generator
 
