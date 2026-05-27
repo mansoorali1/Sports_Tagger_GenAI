@@ -1,0 +1,36 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'notebooks/**'
+      - 'README.md'
+      - '.gitignore'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "deploy@github-actions.com"
+          git config --global user.name "GitHub Actions"
+
+          git remote remove hf_space 2>/dev/null || true
+          git remote add hf_space \
+            https://mansoorsk:$HF_TOKEN@huggingface.co/spaces/mansoorsk/MatchLens_AI
+
+          git push hf_space main:main --force
