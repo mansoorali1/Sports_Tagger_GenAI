@@ -7,7 +7,7 @@ import os
 from huggingface_hub import hf_hub_download
 
 REPO_ID       = 'mansoorsk/matchlens-artifacts'
-ARTIFACTS_DIR = 'artifacts'
+ARTIFACTS_DIR = '/app/artifacts'
 FILES         = [
     'svm_classifier.joblib',
     'tfidf_vectorizer.joblib',
