@@ -1192,17 +1192,30 @@ def classify_segments(segments: list,
     probas    = svm_clf.predict_proba(X)
     max_proba = probas.max(axis=1)
 
+    # return [
+    #     {
+    #         'minute'    : seg['minute'],
+    #         'text'      : seg['text'],
+    #         'label'     : id2label[preds[i]],
+    #         'confidence': round(float(max_proba[i]), 3),
+    #         'impact'    : IMPACT_SCORES.get(id2label[preds[i]], 0)
+    #     }
+    #     for i, seg in enumerate(segments)
+    # ]
+    # FIX — pass through all minute fields
     return [
         {
-            'minute'    : seg['minute'],
-            'text'      : seg['text'],
-            'label'     : id2label[preds[i]],
-            'confidence': round(float(max_proba[i]), 3),
-            'impact'    : IMPACT_SCORES.get(id2label[preds[i]], 0)
+            'minute'      : seg['minute'],
+            'added'       : seg['added'],
+            'sort_key'    : seg['sort_key'],
+            'minute_label': seg['minute_label'],   # ← carry this forward
+            'text'        : seg['text'],
+            'label'       : id2label[preds[i]],
+            'confidence'  : round(float(max_proba[i]), 3),
+            'impact'      : IMPACT_SCORES.get(id2label[preds[i]], 0)
         }
         for i, seg in enumerate(segments)
     ]
-
 
 # ── Timeline builder ───────────────────────────────────────────────
 
@@ -1227,7 +1240,9 @@ def build_timeline(classified_segments: list,
             if s['impact'] >= 1 and s['confidence'] >= 0.5
         ]
 
-    filtered.sort(key=lambda x: x['minute'] if x['minute'] else 999)
+    # filtered.sort(key=lambda x: x['minute'] if x['minute'] else 999)
+    filtered.sort(key=lambda x: x['sort_key'] if x.get('sort_key') is not None else 999)
+
 
     header = (
         f"Match: {home_team} vs {away_team}\n"
@@ -1235,10 +1250,15 @@ def build_timeline(classified_segments: list,
         f"Competition: {competition}\n\n"
         f"Key Events:\n"
     )
+    # lines = [
+    #     f"  {'Minute ' + str(s['minute']) if s['minute'] else 'Unknown'}: "
+    #     f"{s['label'].upper()} — {s['text']}"
+    #     for s in filtered
+    # ]
     lines = [
-        f"  {'Minute ' + str(s['minute']) if s['minute'] else 'Unknown'}: "
-        f"{s['label'].upper()} — {s['text']}"
-        for s in filtered
+    f"  {s.get('minute_label', str(s['minute']) + chr(39))}: "  # ← "90'+4'"
+    f"{s['label'].upper()} — {s['text']}"
+    for s in filtered
     ]
 
     return header + '\n'.join(lines), filtered
