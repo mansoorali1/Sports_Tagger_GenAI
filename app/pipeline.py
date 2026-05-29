@@ -485,55 +485,266 @@ def load_artifacts(artifacts_dir: str = 'artifacts'):
 #             current_minute = None # Reset after application
 
 #     return segments
+# def segment_commentary(raw_text: str) -> list:
+#     """
+#     Parses raw football commentary copied from websites into
+#     clean individual event segments.
+
+#     Handles two real-world copy-paste formats:
+
+#     Format A — inline minute and text on same line:
+#         33' Goal! Brighton 0-1 Manchester United...
+#         45+3' Yellow Card. Kobbie Mainoo shown yellow...
+
+#     Format B — multi-line blocks from modern sites like BBC Sport:
+#         82'
+#         Substitution
+#         Luke Shaw
+#         Luke Shaw
+#         Tyrell Malacia
+#         Tyrell Malacia
+#         Substitution, Manchester United. Tyrell Malacia replaces Luke Shaw.
+
+#     For Format B the function:
+#         - Detects the minute on its own line
+#         - Identifies the event label line immediately after
+#         - Skips duplicate player name lines
+#         - Keeps only the full descriptive sentence at the end of the block
+#     """
+
+#     # Known event label words that appear as standalone lines
+#     # after the minute in multi-line format commentary
+#     EVENT_LABELS = {
+#         'goal', 'goal!', 'yellow card', 'red card', 'substitution',
+#         'sub', 'penalty', 'offside', 'corner', 'foul', 'var',
+#         'attempt', 'free kick', 'second yellow', 'sending off',
+#         'assist', 'own goal', 'var review', 'var decision',
+#         'manchester united club badge', 'club badge',
+#         'second half begins', 'first half begins',
+#         'second half ends', 'first half ends',
+#         'half time', 'full time', 'kick off',
+#         'fourth official', 'delay in match', 'delay over',
+#         'they are ready to continue', 'lineups are announced',
+#         'players are warming up'
+#     }
+
+#     # Lines to skip entirely — they carry no event information
+#     NOISE_PATTERNS = [
+#         r'^second half ends',
+#         r'^first half ends',
+#         r'^full time',
+#         r'^half time',
+#         r'^second half begins',
+#         r'^first half begins',
+#         r'^lineups are announced',
+#         r'^players are warming',
+#         r'^fourth official',
+#         r'^delay in match',
+#         r'^delay over',
+#         r'^they are ready',
+#         r'^kick off',
+#         r'^var review$',
+#         r'^var decision$',
+#         r'^goal awarded',
+#         r'^club badge',
+#         r'club badge$',
+#     ]
+
+#     lines = raw_text.strip().split('\n')
+#     segments = []
+
+#     i = 0
+#     while i < len(lines):
+#         line = lines[i].strip()
+
+#         if not line:
+#             i += 1
+#             continue
+
+#         # Check if this line is a standalone minute timestamp
+#         # Handles: 82'   90'+2'   90+5'   45'+3'   45'
+#         minute_only = re.match(
+#             r'^(\d+)(?:\+\d+)?[\'′\u2019]?\s*$',
+#             line
+#         )
+
+#         if minute_only:
+#             minute = int(minute_only.group(1))
+
+#             # Look ahead to collect the block belonging to this minute
+#             i += 1
+#             block_lines = []
+
+#             while i < len(lines):
+#                 next_line = lines[i].strip()
+
+#                 # Stop when we hit the next minute marker
+#                 next_minute = re.match(
+#                     r'^(\d+)(?:\+\d+)?[\'′\u2019]',
+#                     next_line
+#                 )
+#                 if next_minute:
+#                     break
+
+#                 if next_line:
+#                     block_lines.append(next_line)
+#                 i += 1
+
+#             if not block_lines:
+#                 continue
+
+#             # From the block find the best descriptive line.
+#             # Priority: longest line that is not a noise/label line
+#             # and contains at least 6 words.
+#             best_line = None
+#             for bl in reversed(block_lines):
+#                 bl_lower = bl.lower().strip()
+
+#                 # Skip noise
+#                 is_noise = any(
+#                     re.search(p, bl_lower) for p in NOISE_PATTERNS
+#                 )
+#                 if is_noise:
+#                     continue
+
+#                 # Skip pure event label lines
+#                 if bl_lower in EVENT_LABELS:
+#                     continue
+
+#                 # Skip short lines (likely player name duplicates)
+#                 if len(bl.split()) < 5:
+#                     continue
+
+#                 # Skip lines that are just a score like "0 - 3"
+#                 if re.match(r'^\d+\s*[-–]\s*\d+$', bl.strip()):
+#                     continue
+
+#                 # Skip lines that are team + score like
+#                 # "Brighton and Hove Albion 0 - 3 Manchester United"
+#                 if re.match(
+#                     r'^[A-Za-z\s]+ \d+ [-–] \d+ [A-Za-z\s]+$',
+#                     bl.strip()
+#                 ):
+#                     continue
+
+#                 best_line = bl
+#                 break
+
+#             if best_line and len(best_line.split()) >= 5:
+#                 segments.append({
+#                     'minute': minute,
+#                     'text'  : best_line
+#                 })
+
+#             continue
+
+#         # Format A — minute and text on the same line
+#         # Handles: 33' Goal! Brighton...   or   45'+3' Kobbie Mainoo...
+#         inline_match = re.match(
+#             r'^(\d+)(?:\+\d+)?[\'′\u2019]\s+(.+)$',
+#             line
+#         )
+
+#         if inline_match:
+#             minute    = int(inline_match.group(1))
+#             text_part = inline_match.group(2).strip()
+
+#             # Skip noise lines
+#             is_noise = any(
+#                 re.search(p, text_part.lower()) for p in NOISE_PATTERNS
+#             )
+#             if not is_noise and len(text_part.split()) >= 5:
+#                 segments.append({
+#                     'minute': minute,
+#                     'text'  : text_part
+#                 })
+
+#             i += 1
+#             continue
+
+#         # Line has no minute — skip it
+#         # (orphaned player names, badges, etc.)
+#         i += 1
+
+#     return segments
+import re
+
+
 def segment_commentary(raw_text: str) -> list:
     """
-    Parses raw football commentary copied from websites into
-    clean individual event segments.
+    Parses raw football commentary copied from two website formats into
+    clean individual event segments, returning only meaningful events
+    (goals, yellow cards, red cards, substitutions, attempts, fouls, etc.)
 
-    Handles two real-world copy-paste formats:
+    Handles:
+      Format A  — minute and text on same line:
+          33' Goal! Brighton 0-1 Manchester United...
 
-    Format A — inline minute and text on same line:
-        33' Goal! Brighton 0-1 Manchester United...
-        45+3' Yellow Card. Kobbie Mainoo shown yellow...
+      Format B  — BBC Sport multi-line blocks:
+          82'
+          Substitution
+          Luke Shaw
+          Luke Shaw
+          Tyrell Malacia
+          Tyrell Malacia
+          Substitution, Manchester United. Tyrell Malacia replaces Luke Shaw.
 
-    Format B — multi-line blocks from modern sites like BBC Sport:
-        82'
-        Substitution
-        Luke Shaw
-        Luke Shaw
-        Tyrell Malacia
-        Tyrell Malacia
-        Substitution, Manchester United. Tyrell Malacia replaces Luke Shaw.
-
-    For Format B the function:
-        - Detects the minute on its own line
-        - Identifies the event label line immediately after
-        - Skips duplicate player name lines
-        - Keeps only the full descriptive sentence at the end of the block
+      Format C  — sports journalism site (e.g. Real Madrid commentary):
+          88‎'‎
+          Goal!
+          21
+          Brahim Díaz
+          Attacker
+          THERE'S THE FOURTH FOR MADRID!! Brahim Diaz rounds off...
+          Shot type
+          Left foot
+          xG
+          0.74
+          xGOT
+          0.91
     """
 
-    # Known event label words that appear as standalone lines
-    # after the minute in multi-line format commentary
-    EVENT_LABELS = {
-        'goal', 'goal!', 'yellow card', 'red card', 'substitution',
-        'sub', 'penalty', 'offside', 'corner', 'foul', 'var',
-        'attempt', 'free kick', 'second yellow', 'sending off',
-        'assist', 'own goal', 'var review', 'var decision',
-        'manchester united club badge', 'club badge',
-        'second half begins', 'first half begins',
-        'second half ends', 'first half ends',
-        'half time', 'full time', 'kick off',
+    # ------------------------------------------------------------------ #
+    #  Regex: matches any minute stamp on its own line or leading a line   #
+    #  Covers: 3'  45'  45'+2'  90+3'  90+3‎'‎  (plain ' or unicode variants)
+    # ------------------------------------------------------------------ #
+    MINUTE_PATTERN = re.compile(
+        r'^(\d{1,3})(?:\+\d{1,3})?[\'\u2019\u2018\u201b\u02bc\xb4]'
+        r'(?:\u200e|\u200f|\u202a|\u202c)*'   # swallow any bidi marks
+        r'\s*$'
+    )
+
+    MINUTE_INLINE = re.compile(
+        r'^(\d{1,3})(?:\+\d{1,3})?[\'\u2019\u2018\u201b\u02bc\xb4]'
+        r'(?:\u200e|\u200f|\u202a|\u202c)*'
+        r'\s+(.+)$'
+    )
+
+    # ------------------------------------------------------------------ #
+    #  Event labels that appear as standalone lines right after a minute.  #
+    #  When found alone they are stripped; the real sentence follows.      #
+    # ------------------------------------------------------------------ #
+    STANDALONE_EVENT_LABELS = {
+        'goal', 'goal!', 'yellow card', 'red card', 'substitution', 'sub',
+        'penalty', 'penalty missed', 'penalty saved', 'offside', 'corner',
+        'foul', 'var', 'attempt', 'free kick', 'second yellow', 'sending off',
+        'own goal', 'var review', 'var decision', 'assist', 'highlight',
+        'second half begins', 'first half begins', 'second half ends',
+        'first half ends', 'half time', 'full time', 'kick off',
         'fourth official', 'delay in match', 'delay over',
         'they are ready to continue', 'lineups are announced',
-        'players are warming up'
+        'players are warming up',
     }
 
-    # Lines to skip entirely — they carry no event information
-    NOISE_PATTERNS = [
+    # ------------------------------------------------------------------ #
+    #  Patterns for lines that carry zero useful event information.        #
+    # ------------------------------------------------------------------ #
+    NOISE_LINE_PATTERNS = [
+        # half/full time banners
         r'^second half ends',
         r'^first half ends',
         r'^full time',
-        r'^half time',
+        r'^half[-\s]?time',
         r'^second half begins',
         r'^first half begins',
         r'^lineups are announced',
@@ -546,127 +757,190 @@ def segment_commentary(raw_text: str) -> list:
         r'^var review$',
         r'^var decision$',
         r'^goal awarded',
-        r'^club badge',
-        r'club badge$',
+        # club badge lines
+        r'club badge',
+        # score-only lines:  "0 - 3"  or  "West Ham United 3 - 0 Leeds United"
+        r'^\d+\s*[-–]\s*\d+$',
+        r'^[a-z\s]+ \d+ [-–] \d+ [a-z\s]+$',
+        # xG / shot stat lines (from journalism sites)
+        r'^shot type$',
+        r'^xg$',
+        r'^xgot$',
+        r'^right foot$',
+        r'^left foot$',
+        r'^header$',
+        r'^\d+\.\d+$',            # bare decimal numbers like 0.74
+        r'^\d+$',                 # bare integers like squad numbers
+        # position labels
+        r'^striker$', r'^attacker$', r'^midfielder$', r'^defender$',
+        r'^goalkeeper$', r'^right winger$', r'^left winger$',
+        r'^right[-\s]back$', r'^left[-\s]back$',
+        r'^central midfielder$', r'^left midfielder$', r'^right midfielder$',
+        # half-time summary block (long analyst paragraph without a minute)
+        r'^referee \w+ brings an end',
+        r'^the players are back out',
     ]
 
+    # ------------------------------------------------------------------ #
+    #  Helper: does a (lowercased) line match any noise pattern?           #
+    # ------------------------------------------------------------------ #
+    def is_noise(line_lower: str) -> bool:
+        return any(re.search(p, line_lower) for p in NOISE_LINE_PATTERNS)
+
+    # ------------------------------------------------------------------ #
+    #  Helper: is this line a standalone event label?                      #
+    # ------------------------------------------------------------------ #
+    def is_event_label(line_lower: str) -> bool:
+        return line_lower.strip() in STANDALONE_EVENT_LABELS
+
+    # ------------------------------------------------------------------ #
+    #  Helper: is this line a duplicate player-name line?                  #
+    #  Heuristic: ≤4 words, Title Case or ALL CAPS, no punctuation.       #
+    # ------------------------------------------------------------------ #
+    def is_player_name_dupe(line: str) -> bool:
+        stripped = line.strip()
+        if len(stripped.split()) > 5:
+            return False
+        # No sentence-ending punctuation and no parentheses
+        if re.search(r'[().,:;!?]', stripped):
+            return False
+        # Looks like a name (each word capitalised or all-caps)
+        words = stripped.split()
+        if all(w[0].isupper() for w in words if w):
+            return True
+        return False
+
+    # ------------------------------------------------------------------ #
+    #  Helper: pick the best descriptive sentence from a block of lines.  #
+    #                                                                      #
+    #  Priority rules (in order):                                          #
+    #   1. A line that starts with a known event keyword followed by a     #
+    #      capital letter and team/player name  →  the "clean" sentence.  #
+    #      e.g. "Goal! West Ham United 3, Leeds United 0. Callum Wilson…" #
+    #      e.g. "Substitution, Leeds United. Joël Piroe replaces Ao…"     #
+    #      e.g. "Kobbie Mainoo (Manchester United) is shown the yellow…"  #
+    #   2. Longest line with ≥ 7 words that is not noise / label / name.  #
+    # ------------------------------------------------------------------ #
+    CLEAN_SENTENCE_PREFIXES = re.compile(
+        r'^(goal!|substitution,|substitution\b|yellow card|red card|'
+        r'attempt\s+(saved|missed|blocked)|foul\s+by|'
+        r'corner,|offside,|penalty\b|free\s+kick\b|'
+        r'var\s*[-–]?\s*(review|decision|goal awarded)|'
+        r'[a-záéíóúñüàèìòùäöüç]+\s+\w+\s+\()',  # "Player Name (Club)"
+        re.IGNORECASE
+    )
+
+    def best_line_from_block(block_lines: list) -> str | None:
+        candidates = []
+        for bl in block_lines:
+            bl_lower = bl.lower().strip()
+            if is_noise(bl_lower):
+                continue
+            if is_event_label(bl_lower):
+                continue
+            if is_player_name_dupe(bl):
+                continue
+            if len(bl.split()) < 5:
+                continue
+            candidates.append(bl)
+
+        if not candidates:
+            return None
+
+        # Priority 1: find a line that starts with a clean-sentence prefix
+        for c in candidates:
+            if CLEAN_SENTENCE_PREFIXES.match(c.strip()):
+                return c
+
+        # Priority 2: longest candidate
+        return max(candidates, key=lambda x: len(x.split()))
+
+    # ------------------------------------------------------------------ #
+    #  Main parsing loop                                                   #
+    # ------------------------------------------------------------------ #
     lines = raw_text.strip().split('\n')
     segments = []
+    seen_minutes: dict[int, list] = {}   # minute → list of texts (dedupe)
 
     i = 0
     while i < len(lines):
-        line = lines[i].strip()
+        raw_line = lines[i]
+        line = raw_line.strip()
 
         if not line:
             i += 1
             continue
 
-        # Check if this line is a standalone minute timestamp
-        # Handles: 82'   90'+2'   90+5'   45'+3'   45'
-        minute_only = re.match(
-            r'^(\d+)(?:\+\d+)?[\'′\u2019]?\s*$',
-            line
-        )
-
-        if minute_only:
-            minute = int(minute_only.group(1))
-
-            # Look ahead to collect the block belonging to this minute
+        # ---- Check for standalone minute line (Format B / C) ----
+        m_only = MINUTE_PATTERN.match(line)
+        if m_only:
+            minute = int(m_only.group(1))
             i += 1
             block_lines = []
 
             while i < len(lines):
-                next_line = lines[i].strip()
+                next_raw = lines[i]
+                next_line = next_raw.strip()
 
-                # Stop when we hit the next minute marker
-                next_minute = re.match(
-                    r'^(\d+)(?:\+\d+)?[\'′\u2019]',
-                    next_line
-                )
-                if next_minute:
+                # Stop at next minute marker (standalone or inline)
+                if MINUTE_PATTERN.match(next_line) or MINUTE_INLINE.match(next_line):
                     break
 
                 if next_line:
                     block_lines.append(next_line)
                 i += 1
 
-            if not block_lines:
-                continue
-
-            # From the block find the best descriptive line.
-            # Priority: longest line that is not a noise/label line
-            # and contains at least 6 words.
-            best_line = None
-            for bl in reversed(block_lines):
-                bl_lower = bl.lower().strip()
-
-                # Skip noise
-                is_noise = any(
-                    re.search(p, bl_lower) for p in NOISE_PATTERNS
-                )
-                if is_noise:
-                    continue
-
-                # Skip pure event label lines
-                if bl_lower in EVENT_LABELS:
-                    continue
-
-                # Skip short lines (likely player name duplicates)
-                if len(bl.split()) < 5:
-                    continue
-
-                # Skip lines that are just a score like "0 - 3"
-                if re.match(r'^\d+\s*[-–]\s*\d+$', bl.strip()):
-                    continue
-
-                # Skip lines that are team + score like
-                # "Brighton and Hove Albion 0 - 3 Manchester United"
-                if re.match(
-                    r'^[A-Za-z\s]+ \d+ [-–] \d+ [A-Za-z\s]+$',
-                    bl.strip()
-                ):
-                    continue
-
-                best_line = bl
-                break
-
-            if best_line and len(best_line.split()) >= 5:
-                segments.append({
-                    'minute': minute,
-                    'text'  : best_line
-                })
-
+            best = best_line_from_block(block_lines)
+            if best:
+                _add_segment(segments, seen_minutes, minute, best)
             continue
 
-        # Format A — minute and text on the same line
-        # Handles: 33' Goal! Brighton...   or   45'+3' Kobbie Mainoo...
-        inline_match = re.match(
-            r'^(\d+)(?:\+\d+)?[\'′\u2019]\s+(.+)$',
-            line
-        )
+        # ---- Check for inline minute + text (Format A) ----
+        m_inline = MINUTE_INLINE.match(line)
+        if m_inline:
+            minute = int(m_inline.group(1))
+            text_part = m_inline.group(2).strip()
+            text_lower = text_part.lower()
 
-        if inline_match:
-            minute    = int(inline_match.group(1))
-            text_part = inline_match.group(2).strip()
-
-            # Skip noise lines
-            is_noise = any(
-                re.search(p, text_part.lower()) for p in NOISE_PATTERNS
-            )
-            if not is_noise and len(text_part.split()) >= 5:
-                segments.append({
-                    'minute': minute,
-                    'text'  : text_part
-                })
+            if not is_noise(text_lower) and len(text_part.split()) >= 5:
+                _add_segment(segments, seen_minutes, minute, text_part)
 
             i += 1
             continue
 
-        # Line has no minute — skip it
-        # (orphaned player names, badges, etc.)
+        # ---- No minute on this line — skip ----
         i += 1
 
-    return segments
+    # Return in chronological order
+    return sorted(segments, key=lambda s: s['minute'])
+
+
+# ------------------------------------------------------------------ #
+#  Helper outside the main function to avoid closure issues            #
+# ------------------------------------------------------------------ #
+def _add_segment(
+    segments: list,
+    seen: dict,
+    minute: int,
+    text: str,
+) -> None:
+    """
+    Add a segment only if we haven't already added the same text
+    for the same minute (prevents duplicates from Assist+Goal blocks).
+    """
+    existing = seen.get(minute, [])
+    # Normalise for comparison
+    norm = re.sub(r'\s+', ' ', text.strip().lower())
+    for e in existing:
+        if re.sub(r'\s+', ' ', e.strip().lower()) == norm:
+            return
+        # Also skip if one is a substring of the other (near-dupe)
+        if norm in re.sub(r'\s+', ' ', e.strip().lower()):
+            return
+    existing.append(text)
+    seen[minute] = existing
+    segments.append({'minute': minute, 'text': text})
+
 
 # ── Classification ─────────────────────────────────────────────────
 
