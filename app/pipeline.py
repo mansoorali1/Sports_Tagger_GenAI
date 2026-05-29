@@ -965,23 +965,38 @@ def segment_commentary(raw_text: str) -> list:
     #  Captures group(1)=base, group(2)=added (or None)                   #
     #  Handles both apostrophe styles:  45'   45'+2'   90+3'   90'+4'    #
     # ------------------------------------------------------------------ #
+    # MINUTE_PATTERN = re.compile(
+    #     r'^(\d{1,3})'                                    # base minute
+    #     r'[\'\u2019\u2018\u201b\u02bc\xb4]?'            # optional apostrophe after base
+    #     r'(?:\+(\d{1,3}))?'                              # optional +added group
+    #     r'[\'\u2019\u2018\u201b\u02bc\xb4]'             # closing apostrophe (required)
+    #     r'(?:\u200e|\u200f|\u202a|\u202c)*'              # swallow bidi marks
+    #     r'\s*$'
+    # )
+    # FIXED — handles bidi marks (‎) on either side of the apostrophe
+    # Website 1:  45'   90+3'   45'+2'
+    # Website 2:  88‎'‎   90+3‎'‎   45+1‎'‎  (Left-to-Right Marks wrap the apostrophe)
+    _BIDI = r'(?:\u200e|\u200f|\u202a|\u202c)*'
+    _APO  = r'[\'\u2019\u2018\u201b\u02bc\xb4]'
+    
     MINUTE_PATTERN = re.compile(
-        r'^(\d{1,3})'                                    # base minute
-        r'[\'\u2019\u2018\u201b\u02bc\xb4]?'            # optional apostrophe after base
-        r'(?:\+(\d{1,3}))?'                              # optional +added group
-        r'[\'\u2019\u2018\u201b\u02bc\xb4]'             # closing apostrophe (required)
-        r'(?:\u200e|\u200f|\u202a|\u202c)*'              # swallow bidi marks
-        r'\s*$'
+        r'^(\d{1,3})' + _BIDI + _APO + r'?' + _BIDI +
+        r'(?:\+(\d{1,3}))?' + _BIDI + _APO + _BIDI + r'\s*$'
     )
 
+    # MINUTE_INLINE = re.compile(
+    #     r'^(\d{1,3})'                                    # base minute
+    #     r'[\'\u2019\u2018\u201b\u02bc\xb4]?'            # optional apostrophe after base
+    #     r'(?:\+(\d{1,3}))?'                              # optional +added group
+    #     r'[\'\u2019\u2018\u201b\u02bc\xb4]'             # closing apostrophe (required)
+    #     r'(?:\u200e|\u200f|\u202a|\u202c)*'              # swallow bidi marks
+    #     r'\s+(.+)$'                                      # space then event text
+    # )
     MINUTE_INLINE = re.compile(
-        r'^(\d{1,3})'                                    # base minute
-        r'[\'\u2019\u2018\u201b\u02bc\xb4]?'            # optional apostrophe after base
-        r'(?:\+(\d{1,3}))?'                              # optional +added group
-        r'[\'\u2019\u2018\u201b\u02bc\xb4]'             # closing apostrophe (required)
-        r'(?:\u200e|\u200f|\u202a|\u202c)*'              # swallow bidi marks
-        r'\s+(.+)$'                                      # space then event text
+    r'^(\d{1,3})' + _BIDI + _APO + r'?' + _BIDI +
+    r'(?:\+(\d{1,3}))?' + _BIDI + _APO + _BIDI + r'\s+(.+)$'
     )
+    
 
     # ------------------------------------------------------------------ #
     #  Helper: build a human-readable label and a float sort key          #
@@ -1018,6 +1033,7 @@ def segment_commentary(raw_text: str) -> list:
 
     NOISE_LINE_PATTERNS = [
         r'^second half ends', r'^first half ends', r'^full time',
+        r'^full[-\s]?time',
         r'^half[-\s]?time', r'^second half begins', r'^first half begins',
         r'^lineups are announced', r'^players are warming',
         r'^fourth official', r'^delay in match', r'^delay over',
