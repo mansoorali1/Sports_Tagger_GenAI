@@ -386,6 +386,186 @@ with st.sidebar:
 
 # ── Main area ────────────────────────────────────────────────────
 
+# st.subheader('Paste Match Commentary')
+# st.caption(
+#     'Copy from any football website, live feed, or text document. '
+#     'One event per line works best.'
+# )
+
+# commentary = st.text_area(
+#     label='Commentary text',
+#     height=250,
+#     placeholder=(
+#         "33' Goal! Brighton 0-1 Manchester United. Patrick Dorgu header...\n"
+#         "44' Goal! Brighton 0-2 Manchester United. Bryan Mbeumo...\n"
+#         "48' Goal! Brighton 0-3 Manchester United. Bruno Fernandes...\n"
+#         "45+3' Yellow Card. Kobbie Mainoo shown yellow for a bad foul."
+#     ),
+#     help='Paste full or partial match commentary. Minutes optional.'
+# )
+
+# generate_btn = st.button(
+#     'Generate Highlights',
+#     type='primary',
+#     use_container_width=True
+# )
+
+# # ── Generation ───────────────────────────────────────────────────
+
+# if generate_btn:
+#     if not commentary.strip():
+#         st.error('Please paste some commentary text first.')
+#         st.stop()
+
+#     if len(commentary.strip()) < 50:
+#         st.error('Commentary too short. Paste at least a few match events.')
+#         st.stop()
+
+#     # Build request — use empty string if user left fields blank
+#     # Pipeline handles empty strings by extracting from commentary
+#     payload = {
+#         'commentary' : commentary,
+#         'home_team'  : home_team.strip(),
+#         'away_team'  : away_team.strip(),
+#         'score'      : score.strip() if score.strip() else 'Unknown',
+#         'competition': competition.strip() if competition.strip() else 'Football Match'
+#     }
+
+#     with st.spinner('Classifying events and generating highlights...'):
+#         try:
+#             response = requests.post(
+#                 f'{API_URL}/generate-highlights',
+#                 json=payload,
+#                 timeout=90
+#             )
+
+#             if response.status_code != 200:
+#                 st.error(
+#                     f'API Error {response.status_code}: '
+#                     f'{response.json().get("error", response.text)}'
+#                 )
+#                 st.stop()
+
+#             data = response.json()
+
+#         except requests.exceptions.ConnectionError:
+#             st.error('Cannot connect to API backend.')
+#             st.stop()
+#         except requests.exceptions.Timeout:
+#             st.error('Request timed out. Try with shorter commentary.')
+#             st.stop()
+#         except Exception as e:
+#             st.error(f'Unexpected error: {e}')
+#             st.stop()
+
+#     # ── Match info banner ────────────────────────────────────────
+#     match_info = data.get('match_info', {})
+#     st.success(
+#         f"**{match_info.get('home_team', '?')}** vs "
+#         f"**{match_info.get('away_team', '?')}** — "
+#         f"Score: {match_info.get('score', '?')} — "
+#         f"{match_info.get('competition', '')}"
+#     )
+
+#     # ── Guardrail status ─────────────────────────────────────────
+#     guardrail = data.get('guardrail', {})
+#     verdict   = guardrail.get('verdict', 'UNKNOWN')
+
+#     if verdict == 'PASS':
+#         st.success('Guardrail: PASS — All facts verified')
+#     elif verdict == 'WARN':
+#         issues = ' | '.join(guardrail.get('warnings', []))
+#         st.warning(f'Guardrail: WARN — Review before publishing. {issues}')
+#     else:
+#         issues = ' | '.join(guardrail.get('hard_issues', []))
+#         st.error(f'Guardrail: FAIL — Content blocked. {issues}')
+
+#     # ── Pipeline metrics ─────────────────────────────────────────
+#     col1, col2, col3 = st.columns(3)
+#     col1.metric('Segments Found',  data.get('segments_found', 0))
+#     col2.metric('Key Events Used', data.get('key_events_used', 0))
+#     col3.metric('Guardrail',       verdict)
+
+#     st.divider()
+
+#     highlights = data.get('highlights', {})
+
+#     # ── Output tabs ──────────────────────────────────────────────
+#     tab1, tab2, tab3, tab4, tab5 = st.tabs([
+#         '📰 Full Summary',
+#         '⚡ Executive',
+#         '📱 Push Notification',
+#         '🏆 Player of Match',
+#         '⏱ Key Moments'
+#     ])
+
+#     with tab1:
+#         st.subheader('Full Match Summary')
+#         st.caption('For editorial team — website match report')
+#         st.write(highlights.get('full_summary', 'Not generated'))
+
+#     with tab2:
+#         st.subheader('Executive Summary')
+#         st.caption('For match result cards and in-app match center')
+#         st.info(highlights.get('executive_summary', 'Not generated'))
+
+#     with tab3:
+#         st.subheader('Push Notification')
+#         st.caption('For Growth/Marketing team → mobile push alerts')
+#         notif      = highlights.get('push_notification', 'Not generated')
+#         char_count = len(notif)
+#         st.success(notif)
+#         color = 'green' if char_count <= 120 else 'red'
+#         st.markdown(f'Character count: :{color}[**{char_count}**] / 120')
+
+#     with tab4:
+#         st.subheader('Player of the Match')
+#         st.caption('For post-match stats cards and social media')
+#         st.write(highlights.get('player_of_match', 'Not generated'))
+
+#     with tab5:
+#         st.subheader('Key Moments')
+#         st.caption('For Video Player Engineering — VOD chapter markers')
+#         moments = highlights.get('key_moments', [])
+#         if moments:
+#             for km in moments:
+#                 event_lower = km.get('event', '').lower()
+#                 icon = ('⚽' if 'goal' in event_lower
+#                         else '🟥' if 'red' in event_lower
+#                         else '🟨' if 'yellow' in event_lower
+#                         else '🔄')
+#                 st.markdown(
+#                     f"{icon} **{km.get('minute', '?')}'** "
+#                     f"*{km.get('event', '')}* — "
+#                     f"{km.get('description', '')}"
+#                 )
+#         else:
+#             st.write('No key moments generated')
+
+#     # ── Pipeline internals expander ──────────────────────────────
+#     with st.expander('View classified events (pipeline internals)'):
+#         st.caption(
+#             'Each commentary line classified by TF-IDF + SVM. '
+#             'High-impact events (impact ≥ 2) sent to LLM.'
+#         )
+#         classified = data.get('classified', [])
+#         if classified:
+#             import pandas as pd
+#             df_cls = pd.DataFrame(classified)
+#             cols   = [c for c in ['minute', 'label', 'confidence',
+#                                    'impact', 'text'] if c in df_cls.columns]
+#             st.dataframe(df_cls[cols], use_container_width=True)
+
+# ── Session state init ───────────────────────────────────────────
+
+if 'pipeline_result' not in st.session_state:
+    st.session_state.pipeline_result = None
+
+if 'commentary_text' not in st.session_state:
+    st.session_state.commentary_text = ''
+
+# ── Main area ────────────────────────────────────────────────────
+
 st.subheader('Paste Match Commentary')
 st.caption(
     'Copy from any football website, live feed, or text document. '
@@ -394,6 +574,7 @@ st.caption(
 
 commentary = st.text_area(
     label='Commentary text',
+    value=st.session_state.commentary_text,
     height=250,
     placeholder=(
         "33' Goal! Brighton 0-1 Manchester United. Patrick Dorgu header...\n"
@@ -401,14 +582,30 @@ commentary = st.text_area(
         "48' Goal! Brighton 0-3 Manchester United. Bruno Fernandes...\n"
         "45+3' Yellow Card. Kobbie Mainoo shown yellow for a bad foul."
     ),
-    help='Paste full or partial match commentary. Minutes optional.'
+    help='Paste full or partial match commentary. Minutes optional.',
+    key='commentary_input'
 )
 
-generate_btn = st.button(
-    'Generate Highlights',
-    type='primary',
-    use_container_width=True
-)
+col_gen, col_reset = st.columns([4, 1])
+
+with col_gen:
+    generate_btn = st.button(
+        'Generate Highlights',
+        type='primary',
+        use_container_width=True
+    )
+
+with col_reset:
+    reset_btn = st.button(
+        '🗑 Reset',
+        use_container_width=True,
+        help='Clear the commentary and results'
+    )
+
+if reset_btn:
+    st.session_state.commentary_text = ''
+    st.session_state.pipeline_result = None
+    st.rerun()
 
 # ── Generation ───────────────────────────────────────────────────
 
@@ -421,8 +618,6 @@ if generate_btn:
         st.error('Commentary too short. Paste at least a few match events.')
         st.stop()
 
-    # Build request — use empty string if user left fields blank
-    # Pipeline handles empty strings by extracting from commentary
     payload = {
         'commentary' : commentary,
         'home_team'  : home_team.strip(),
@@ -446,7 +641,9 @@ if generate_btn:
                 )
                 st.stop()
 
-            data = response.json()
+            # ✅ Store result in session state so it survives re-runs
+            st.session_state.pipeline_result = response.json()
+            st.session_state.commentary_text = commentary
 
         except requests.exceptions.ConnectionError:
             st.error('Cannot connect to API backend.')
@@ -458,7 +655,11 @@ if generate_btn:
             st.error(f'Unexpected error: {e}')
             st.stop()
 
-    # ── Match info banner ────────────────────────────────────────
+# ── Output (rendered from session state — survives re-runs) ──────
+
+if st.session_state.pipeline_result:
+    data = st.session_state.pipeline_result
+
     match_info = data.get('match_info', {})
     st.success(
         f"**{match_info.get('home_team', '?')}** vs "
@@ -467,7 +668,6 @@ if generate_btn:
         f"{match_info.get('competition', '')}"
     )
 
-    # ── Guardrail status ─────────────────────────────────────────
     guardrail = data.get('guardrail', {})
     verdict   = guardrail.get('verdict', 'UNKNOWN')
 
@@ -480,7 +680,6 @@ if generate_btn:
         issues = ' | '.join(guardrail.get('hard_issues', []))
         st.error(f'Guardrail: FAIL — Content blocked. {issues}')
 
-    # ── Pipeline metrics ─────────────────────────────────────────
     col1, col2, col3 = st.columns(3)
     col1.metric('Segments Found',  data.get('segments_found', 0))
     col2.metric('Key Events Used', data.get('key_events_used', 0))
@@ -490,7 +689,6 @@ if generate_btn:
 
     highlights = data.get('highlights', {})
 
-    # ── Output tabs ──────────────────────────────────────────────
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         '📰 Full Summary',
         '⚡ Executive',
@@ -542,7 +740,6 @@ if generate_btn:
         else:
             st.write('No key moments generated')
 
-    # ── Pipeline internals expander ──────────────────────────────
     with st.expander('View classified events (pipeline internals)'):
         st.caption(
             'Each commentary line classified by TF-IDF + SVM. '
