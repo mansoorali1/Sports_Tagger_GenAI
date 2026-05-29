@@ -708,10 +708,16 @@ def segment_commentary(raw_text: str) -> list:
     #  Regex: matches any minute stamp on its own line or leading a line   #
     #  Covers: 3'  45'  45'+2'  90+3'  90+3‎'‎  (plain ' or unicode variants)
     # ------------------------------------------------------------------ #
+    # MINUTE_PATTERN = re.compile(
+    #     r'^(\d{1,3})(?:\+\d{1,3})?[\'\u2019\u2018\u201b\u02bc\xb4]'
+    #     r'(?:\u200e|\u200f|\u202a|\u202c)*'   # swallow any bidi marks
+    #     r'\s*$'
+    # )
     MINUTE_PATTERN = re.compile(
-        r'^(\d{1,3})(?:\+\d{1,3})?[\'\u2019\u2018\u201b\u02bc\xb4]'
-        r'(?:\u200e|\u200f|\u202a|\u202c)*'   # swallow any bidi marks
-        r'\s*$'
+    r'^(\d{1,3})(?:[\'\u2019\u2018\u201b\u02bc\xb4]\+\d{1,3})?'
+    r'[\'\u2019\u2018\u201b\u02bc\xb4]'
+    r'(?:\u200e|\u200f|\u202a|\u202c)*'
+    r'\s*$'
     )
 
     MINUTE_INLINE = re.compile(
