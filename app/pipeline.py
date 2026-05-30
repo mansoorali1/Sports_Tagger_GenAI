@@ -1278,7 +1278,76 @@ def build_timeline(classified_segments: list,
     ]
 
     return header + '\n'.join(lines), filtered
+                       
+# ── Pre-LLM Fact Computation ───────────────────────────────────────
 
+def compute_match_facts(classified_segments: list,
+                        home_team: str,
+                        away_team: str) -> dict:
+    """
+    Deterministically computes ground-truth facts from classified segments
+    BEFORE the LLM sees anything. These facts are passed into the prompt
+    as constraints so the LLM cannot contradict them.
+    """
+    goal_events = [
+        s for s in classified_segments
+        if s['label'] == 'Goal' and s['confidence'] >= 0.5
+    ]
+    red_events = [
+        s for s in classified_segments
+        if s['label'] == 'Red Card'
+    ]
+    yellow_events = [
+        s for s in classified_segments
+        if s['label'] == 'Yellow Card'
+    ]
+
+    # ── Scorer extraction ─────────────────────────────────────────
+    # Pattern: "Firstname Lastname (Club)" or "Firstname Lastname right footed..."
+    NAME_PATTERN = re.compile(
+        r'^([A-Z][a-záéíóúñüàèìòùä]+(?:\s+[A-Z][a-záéíóúñüàèìòùä]+){1,3})'
+        r'(?:\s+\(|\s+right|\s+left|\s+header|\s+scores|\s+converts|\s+taps)'
+    )
+
+    scorer_counts: dict[str, int] = {}
+
+    for g in goal_events:
+        text = g['text'].strip()
+        # Try regex first
+        match = NAME_PATTERN.match(text)
+        if match:
+            name = match.group(1).strip()
+            scorer_counts[name] = scorer_counts.get(name, 0) + 1
+        else:
+            # Fallback: first 2-3 Title Case words at start of text
+            words = text.split()
+            name_words = []
+            for w in words[:4]:
+                if w[0].isupper() and w.isalpha():
+                    name_words.append(w)
+                else:
+                    break
+            if len(name_words) >= 2:
+                name = ' '.join(name_words)
+                scorer_counts[name] = scorer_counts.get(name, 0) + 1
+
+    # ── Classify scorers ──────────────────────────────────────────
+    braces     = [p for p, c in scorer_counts.items() if c == 2]
+    hat_tricks = [p for p, c in scorer_counts.items() if c >= 3]
+
+    # ── Team goal split (heuristic from score string) ─────────────
+    # We don't have team attribution per goal from raw text reliably,
+    # so we just report total goals as ground truth.
+
+    return {
+        'total_goals'   : len(goal_events),
+        'scorer_counts' : scorer_counts,
+        'braces'        : braces,
+        'hat_tricks'    : hat_tricks,
+        'red_card_count': len(red_events),
+        'yellow_card_count': len(yellow_events),
+        'goal_scorers_list': list(scorer_counts.keys()),
+    }
 
 # ── Match Metadata Extraction From Commentary ──────────────────────
 
@@ -1361,17 +1430,65 @@ SYSTEM_PROMPT = (
 )
 
 
-def generate_highlights(timeline_text: str, groq_api_key: str) -> dict:
+# def generate_highlights(timeline_text: str, groq_api_key: str) -> dict:
+#     """
+#     Sends timeline to LLaMA-3 via Groq and returns parsed highlights.
+#     """
+#     import httpx
+#     http_client = httpx.Client()
+    
+#     client = Groq(
+#         api_key=groq_api_key,
+#         http_client=http_client
+#     )
+
+#     response = client.chat.completions.create(
+#         model='llama-3.1-8b-instant',
+#         temperature=0.3,
+#         max_tokens=1500,
+#         messages=[
+#             {'role': 'system', 'content': SYSTEM_PROMPT},
+#             {'role': 'user',
+#              'content': f'Generate match content:\n\n{timeline_text}'}
+#         ]
+#     )
+#     raw = response.choices[0].message.content
+#     return parse_llm_output(raw)
+
+def generate_highlights(timeline_text: str,
+                        groq_api_key: str,
+                        match_facts: dict | None = None) -> dict:
     """
     Sends timeline to LLaMA-3 via Groq and returns parsed highlights.
+    match_facts are injected as hard constraints into the prompt.
     """
     import httpx
     http_client = httpx.Client()
-    
+
     client = Groq(
         api_key=groq_api_key,
         http_client=http_client
     )
+
+    # ── Build grounded facts block ────────────────────────────────
+    facts_block = ""
+    if match_facts:
+        lines = [
+            "\n\nGROUND TRUTH FACTS — these are computed from source data.",
+            "You MUST NOT contradict any of these in your output:\n",
+            f"- Total goals in this match: {match_facts['total_goals']}",
+            f"- Goal scorers and counts: {match_facts['scorer_counts']}",
+        ]
+        if match_facts['braces']:
+            lines.append(f"- Players who scored a brace (exactly 2 goals): {match_facts['braces']}")
+        if match_facts['hat_tricks']:
+            lines.append(f"- Players who scored a hat-trick (3+ goals): {match_facts['hat_tricks']}")
+        if not match_facts['braces'] and not match_facts['hat_tricks']:
+            lines.append("- No player scored more than once. Do NOT use the words brace or hat-trick.")
+        lines.append(f"- Red cards issued: {match_facts['red_card_count']}")
+        if match_facts['red_card_count'] == 0:
+            lines.append("- No red cards. Do NOT mention any red card in the summary.")
+        facts_block = "\n".join(lines)
 
     response = client.chat.completions.create(
         model='llama-3.1-8b-instant',
@@ -1380,12 +1497,11 @@ def generate_highlights(timeline_text: str, groq_api_key: str) -> dict:
         messages=[
             {'role': 'system', 'content': SYSTEM_PROMPT},
             {'role': 'user',
-             'content': f'Generate match content:\n\n{timeline_text}'}
+             'content': f'Generate match content:\n\n{timeline_text}{facts_block}'}
         ]
     )
     raw = response.choices[0].message.content
     return parse_llm_output(raw)
-
 
 def parse_llm_output(raw: str) -> dict:
     """Parses JSON from LLM response handling markdown fences."""
@@ -1412,38 +1528,134 @@ def parse_llm_output(raw: str) -> dict:
 
 # ── Guardrail ──────────────────────────────────────────────────────
 
+# def run_guardrail(highlights: dict,
+#                   classified_segments: list) -> dict:
+#     """
+#     Post-generation fact verification guardrail.
+#     """
+#     full_text  = highlights.get('full_summary', '').lower()
+#     key_moments = highlights.get('key_moments', [])
+#     hard_issues = []
+#     warnings    = []
+
+#     goal_events = [s for s in classified_segments
+#                    if s['label'] == 'Goal' and s['impact'] >= 4]
+#     red_events  = [s for s in classified_segments
+#                    if s['label'] == 'Red Card']
+
+#     goals_in_moments = sum(
+#         1 for km in key_moments
+#         if 'goal' in km.get('event', '').lower()
+#     )
+#     if abs(goals_in_moments - len(goal_events)) > 1:
+#         warnings.append(
+#             f'Goal count mismatch: LLM={goals_in_moments}, '
+#             f'classified={len(goal_events)}'
+#         )
+
+#     for rc in red_events:
+#         rc_words = [w for w in rc['text'].lower().split()
+#                     if len(w) > 4 and w not in ['footed', 'shot', 'from']]
+#         found = any(word in full_text for word in rc_words[:3])
+#         if not found:
+#             warnings.append('Red card event may not be mentioned in summary')
+
+#     notif = highlights.get('push_notification', '')
+#     if len(notif) > 120:
+#         hard_issues.append(
+#             f'Push notification too long: {len(notif)} chars (limit 120)'
+#         )
+
+#     verdict = 'FAIL' if hard_issues else 'WARN' if warnings else 'PASS'
+
+#     return {
+#         'verdict'         : verdict,
+#         'hard_issues'     : hard_issues,
+#         'warnings'        : warnings,
+#         'guardrail_passed': verdict != 'FAIL'
+#     }
+
 def run_guardrail(highlights: dict,
-                  classified_segments: list) -> dict:
+                  classified_segments: list,
+                  match_facts: dict | None = None) -> dict:
     """
     Post-generation fact verification guardrail.
+    Now cross-checks against pre-computed match_facts for scorer-level accuracy.
     """
-    full_text  = highlights.get('full_summary', '').lower()
+    full_text   = highlights.get('full_summary', '').lower()
     key_moments = highlights.get('key_moments', [])
     hard_issues = []
     warnings    = []
 
-    goal_events = [s for s in classified_segments
-                   if s['label'] == 'Goal' and s['impact'] >= 4]
-    red_events  = [s for s in classified_segments
-                   if s['label'] == 'Red Card']
+    # ── Use pre-computed facts if available, else recompute ───────
+    if match_facts is None:
+        match_facts = compute_match_facts(classified_segments, '', '')
 
+    total_goals      = match_facts['total_goals']
+    scorer_counts    = match_facts['scorer_counts']
+    braces           = match_facts['braces']
+    hat_tricks       = match_facts['hat_tricks']
+    red_card_count   = match_facts['red_card_count']
+
+    # ── 1. Goal count check ───────────────────────────────────────
     goals_in_moments = sum(
         1 for km in key_moments
         if 'goal' in km.get('event', '').lower()
     )
-    if abs(goals_in_moments - len(goal_events)) > 1:
+    if abs(goals_in_moments - total_goals) > 1:
         warnings.append(
-            f'Goal count mismatch: LLM={goals_in_moments}, '
-            f'classified={len(goal_events)}'
+            f'Goal count mismatch: LLM key_moments has {goals_in_moments} '
+            f'goals, classified data has {total_goals}'
         )
 
-    for rc in red_events:
-        rc_words = [w for w in rc['text'].lower().split()
-                    if len(w) > 4 and w not in ['footed', 'shot', 'from']]
-        found = any(word in full_text for word in rc_words[:3])
-        if not found:
-            warnings.append('Red card event may not be mentioned in summary')
+    # ── 2. Brace / hat-trick hallucination check ──────────────────
+    if 'hat-trick' in full_text or 'hat trick' in full_text:
+        if not hat_tricks:
+            hard_issues.append(
+                'Hallucination: summary mentions hat-trick but no player '
+                'scored 3+ goals in the classified events'
+            )
 
+    if 'brace' in full_text:
+        if not braces:
+            hard_issues.append(
+                'Hallucination: summary mentions brace but no player '
+                'scored exactly 2 goals in the classified events'
+            )
+
+    # ── 3. Scorer name check ──────────────────────────────────────
+    # If a player name appears in scorer_counts with count=1,
+    # make sure the summary doesn't pair them with brace/hat-trick language
+    for player, count in scorer_counts.items():
+        first_name = player.split()[0].lower()
+        if count == 1:
+            # Check if the summary incorrectly inflates their tally
+            if first_name in full_text:
+                surrounding = full_text[max(0, full_text.find(first_name)-30):
+                                        full_text.find(first_name)+60]
+                if 'brace' in surrounding or 'hat-trick' in surrounding or 'hat trick' in surrounding:
+                    warnings.append(
+                        f'Possible hallucination: {player} scored 1 goal '
+                        f'but summary may attribute multiple goals to them'
+                    )
+
+    # ── 4. Red card check ─────────────────────────────────────────
+    if red_card_count == 0 and ('red card' in full_text or 'sent off' in full_text or 'sending off' in full_text):
+        hard_issues.append(
+            'Hallucination: summary mentions red card but none found '
+            'in classified events'
+        )
+
+    if red_card_count > 0:
+        red_events = [s for s in classified_segments if s['label'] == 'Red Card']
+        for rc in red_events:
+            rc_words = [w for w in rc['text'].lower().split()
+                        if len(w) > 4 and w not in ['footed', 'shot', 'from']]
+            found = any(word in full_text for word in rc_words[:3])
+            if not found:
+                warnings.append('Red card event may not be mentioned in summary')
+
+    # ── 5. Push notification length ───────────────────────────────
     notif = highlights.get('push_notification', '')
     if len(notif) > 120:
         hard_issues.append(
@@ -1456,9 +1668,9 @@ def run_guardrail(highlights: dict,
         'verdict'         : verdict,
         'hard_issues'     : hard_issues,
         'warnings'        : warnings,
-        'guardrail_passed': verdict != 'FAIL'
+        'guardrail_passed': verdict != 'FAIL',
+        'match_facts'     : match_facts,   # expose for debugging in UI
     }
-
 
 # ── Main pipeline entry point ──────────────────────────────────────
 
@@ -1488,8 +1700,17 @@ def run_pipeline(raw_text: str,
     timeline, key_events = build_timeline(
         classified, home_team, away_team, score, competition
     )
-    highlights = generate_highlights(timeline, groq_api_key)
-    guardrail  = run_guardrail(highlights, classified)
+    # highlights = generate_highlights(timeline, groq_api_key)
+    # guardrail  = run_guardrail(highlights, classified)
+
+    # ── Compute ground-truth facts BEFORE calling LLM ─────────────
+    match_facts = compute_match_facts(classified, home_team, away_team)
+
+    # ── Pass facts as constraints into LLM prompt ──────────────────
+    highlights  = generate_highlights(timeline, groq_api_key, match_facts)
+
+    # ── Validate LLM output against those same facts ───────────────
+    guardrail   = run_guardrail(highlights, classified, match_facts)
 
     return {
         'match_info'      : {
